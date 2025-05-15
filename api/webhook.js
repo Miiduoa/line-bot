@@ -1,6 +1,5 @@
 require('dotenv').config();
 const line = require('@line/bot-sdk');
-const express = require('express');
 const axios = require('axios');
 
 const lineConfig = {
@@ -9,176 +8,6 @@ const lineConfig = {
 };
 
 const client = new line.Client(lineConfig);
-const app = express();
-app.use(express.json());
-
-app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
-  try {
-    const events = req.body.events;
-    await Promise.all(events.map(handleEvent));
-    res.status(200).end();
-  } catch (err) {
-    console.error(err);
-    res.status(500).end();
-  }
-});
-
-async function handleEvent(event) {
-  if (event.type !== 'message' || event.message.type !== 'text') {
-    return;
-  }
-
-  const userText = event.message.text.trim();
-
-  // 幫助命令
-  if (userText === '幫助' || userText === 'help') {
-    await client.replyMessage(event.replyToken, createHelpMessage());
-    return;
-  }
-
-  if (/^天氣\s+/.test(userText)) {
-    const location = userText.replace(/^天氣\s+/, '');
-    const weatherData = await getCWAWeatherData(location);
-    if (weatherData.error) {
-      await client.replyMessage(event.replyToken, { type: 'text', text: weatherData.error });
-    } else {
-      await client.replyMessage(event.replyToken, createWeatherFlexMessage(weatherData));
-    }
-    return;
-  }
-
-  if (/^電影\s+/.test(userText)) {
-    const title = userText.replace(/^電影\s+/, '');
-    const movieData = await getMovieData(title);
-    if (movieData.error) {
-      await client.replyMessage(event.replyToken, { type: 'text', text: movieData.error });
-    } else {
-      await client.replyMessage(event.replyToken, createMovieFlexMessage(movieData));
-    }
-    return;
-  }
-
-  const reply = await askGemini(userText);
-  await client.replyMessage(event.replyToken, { type: 'text', text: reply });
-}
-
-function createHelpMessage() {
-  return {
-    type: 'flex',
-    altText: '機器人功能使用說明',
-    contents: {
-      type: 'bubble',
-      header: {
-        type: 'box',
-        layout: 'vertical',
-        contents: [
-          {
-            type: 'text',
-            text: '機器人使用指南',
-            weight: 'bold',
-            size: 'xl',
-            color: '#ffffff'
-          }
-        ],
-        backgroundColor: '#27ACB2'
-      },
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        contents: [
-          {
-            type: 'text',
-            text: '可用的命令：',
-            weight: 'bold',
-            size: 'lg',
-            margin: 'md'
-          },
-          {
-            type: 'box',
-            layout: 'vertical',
-            margin: 'lg',
-            contents: [
-              {
-                type: 'box',
-                layout: 'baseline',
-                contents: [
-                  {
-                    type: 'text',
-                    text: '天氣 [城市]',
-                    weight: 'bold',
-                    flex: 0,
-                    margin: 'sm'
-                  },
-                  {
-                    type: 'text',
-                    text: '查詢指定城市的天氣',
-                    size: 'sm',
-                    color: '#666666',
-                    margin: 'md'
-                  }
-                ]
-              },
-              {
-                type: 'box',
-                layout: 'baseline',
-                contents: [
-                  {
-                    type: 'text',
-                    text: '電影 [片名]',
-                    weight: 'bold',
-                    flex: 0,
-                    margin: 'sm' 
-                  },
-                  {
-                    type: 'text',
-                    text: '查詢電影資訊',
-                    size: 'sm',
-                    color: '#666666',
-                    margin: 'md'
-                  }
-                ],
-                margin: 'md'
-              }
-            ]
-          },
-          {
-            type: 'text',
-            text: '其他訊息將透過 AI 自動回應',
-            margin: 'xxl',
-            size: 'md',
-            color: '#aaaaaa',
-            wrap: true
-          }
-        ]
-      },
-      footer: {
-        type: 'box',
-        layout: 'vertical',
-        contents: [
-          {
-            type: 'button',
-            action: {
-              type: 'message',
-              label: '天氣 臺北',
-              text: '天氣 臺北'
-            },
-            style: 'primary'
-          },
-          {
-            type: 'button',
-            action: {
-              type: 'message',
-              label: '電影 復仇者聯盟',
-              text: '電影 復仇者聯盟'
-            },
-            style: 'secondary',
-            margin: 'md'
-          }
-        ]
-      }
-    }
-  };
-}
 
 // 縣市對應表，用於將使用者輸入轉換為API需要的地區代碼
 const locationMap = {
@@ -322,7 +151,6 @@ async function getCWAWeatherData(location) {
 // 根據中央氣象署的天氣代碼，獲取對應的圖標URL
 function getWeatherIconUrl(weatherCode) {
   // 簡單映射常見的天氣代碼到圖標
-  // 這裡使用的是自訂邏輯，您可以根據需要調整圖標
   const iconMap = {
     // 晴天
     '1': 'https://cdn-icons-png.flaticon.com/512/979/979585.png',
@@ -366,6 +194,156 @@ function getWeatherIconUrl(weatherCode) {
   };
 
   return iconMap[weatherCode] || 'https://cdn-icons-png.flaticon.com/512/1163/1163661.png'; // 默認圖標
+}
+
+function createHelpMessage() {
+  return {
+    type: 'flex',
+    altText: '機器人功能使用說明',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '機器人使用指南',
+            weight: 'bold',
+            size: 'xl',
+            color: '#ffffff'
+          }
+        ],
+        backgroundColor: '#27ACB2'
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '可用的命令：',
+            weight: 'bold',
+            size: 'lg',
+            margin: 'md'
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            margin: 'lg',
+            contents: [
+              {
+                type: 'box',
+                layout: 'baseline',
+                contents: [
+                  {
+                    type: 'text',
+                    text: '天氣 [城市]',
+                    weight: 'bold',
+                    flex: 0,
+                    margin: 'sm'
+                  },
+                  {
+                    type: 'text',
+                    text: '查詢指定城市的天氣',
+                    size: 'sm',
+                    color: '#666666',
+                    margin: 'md'
+                  }
+                ]
+              },
+              {
+                type: 'box',
+                layout: 'baseline',
+                contents: [
+                  {
+                    type: 'text',
+                    text: '電影 [片名]',
+                    weight: 'bold',
+                    flex: 0,
+                    margin: 'sm' 
+                  },
+                  {
+                    type: 'text',
+                    text: '查詢電影資訊',
+                    size: 'sm',
+                    color: '#666666',
+                    margin: 'md'
+                  }
+                ],
+                margin: 'md'
+              },
+              {
+                type: 'box',
+                layout: 'baseline',
+                contents: [
+                  {
+                    type: 'text',
+                    text: '名言',
+                    weight: 'bold',
+                    flex: 0,
+                    margin: 'sm' 
+                  },
+                  {
+                    type: 'text',
+                    text: '獲取隨機名言佳句',
+                    size: 'sm',
+                    color: '#666666',
+                    margin: 'md'
+                  }
+                ],
+                margin: 'md'
+              }
+            ]
+          },
+          {
+            type: 'text',
+            text: '其他訊息將透過 AI 自動回應',
+            margin: 'xxl',
+            size: 'md',
+            color: '#aaaaaa',
+            wrap: true
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '天氣 臺北',
+              text: '天氣 臺北'
+            },
+            style: 'primary'
+          },
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '電影 復仇者聯盟',
+              text: '電影 復仇者聯盟'
+            },
+            style: 'secondary',
+            margin: 'md'
+          },
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '獲取名言',
+              text: '名言'
+            },
+            style: 'secondary',
+            margin: 'md',
+            color: '#27ACB2'
+          }
+        ]
+      }
+    }
+  };
 }
 
 function createWeatherFlexMessage(data) {
@@ -670,7 +648,210 @@ async function askGemini(text) {
   }
 }
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`LINE Bot running on port ${port}`);
-}); 
+// 取得隨機名言
+async function getRandomQuote() {
+  try {
+    const response = await axios.get('https://api.quotable.io/random');
+    const quote = response.data;
+    
+    // 為中文用戶將英文名言翻譯成中文
+    const translationResponse = await axios.post(
+      'https://translation.googleapis.com/language/translate/v2',
+      {},
+      {
+        params: {
+          q: `${quote.content} - ${quote.author}`,
+          target: 'zh-TW',
+          key: process.env.GOOGLE_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY // 使用現有的API金鑰
+        }
+      }
+    );
+    
+    const translatedText = translationResponse.data.data.translations[0].translatedText;
+    
+    return {
+      original: {
+        content: quote.content,
+        author: quote.author
+      },
+      translated: translatedText
+    };
+  } catch (err) {
+    console.error('Error fetching quote:', err);
+    return {
+      error: '無法取得名言，請稍後再試。'
+    };
+  }
+}
+
+// 創建名言的Flex訊息
+function createQuoteFlexMessage(quoteData) {
+  return {
+    type: 'flex',
+    altText: '今日名言',
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: '今日名言',
+            weight: 'bold',
+            size: 'xl',
+            color: '#27ACB2'
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            margin: 'lg',
+            spacing: 'sm',
+            contents: [
+              {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                  {
+                    type: 'text',
+                    text: quoteData.translated,
+                    wrap: true,
+                    color: '#666666',
+                    size: 'md'
+                  }
+                ]
+              },
+              {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                  {
+                    type: 'text',
+                    text: quoteData.original.content,
+                    wrap: true,
+                    color: '#888888',
+                    size: 'sm',
+                    style: 'italic'
+                  },
+                  {
+                    type: 'text',
+                    text: `- ${quoteData.original.author}`,
+                    wrap: true,
+                    color: '#888888',
+                    size: 'sm',
+                    align: 'end'
+                  }
+                ],
+                margin: 'md'
+              }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            height: 'sm',
+            action: {
+              type: 'message',
+              label: '再來一則',
+              text: '名言'
+            },
+            color: '#27ACB2'
+          }
+        ],
+        flex: 0
+      }
+    }
+  };
+}
+
+async function handleEvent(event) {
+  if (event.type !== 'message' || event.message.type !== 'text') {
+    return null;
+  }
+
+  const userText = event.message.text.trim();
+
+  // 幫助命令
+  if (userText === '幫助' || userText === 'help') {
+    return createHelpMessage();
+  }
+
+  // 天氣查詢
+  if (/^天氣\s+/.test(userText)) {
+    const location = userText.replace(/^天氣\s+/, '');
+    const weatherData = await getCWAWeatherData(location);
+    if (weatherData.error) {
+      return { type: 'text', text: weatherData.error };
+    } else {
+      return createWeatherFlexMessage(weatherData);
+    }
+  }
+
+  // 電影查詢
+  if (/^電影\s+/.test(userText)) {
+    const title = userText.replace(/^電影\s+/, '');
+    const movieData = await getMovieData(title);
+    if (movieData.error) {
+      return { type: 'text', text: movieData.error };
+    } else {
+      return createMovieFlexMessage(movieData);
+    }
+  }
+
+  // 名言功能
+  if (userText === '名言' || userText === 'quote') {
+    const quoteData = await getRandomQuote();
+    if (quoteData.error) {
+      return { type: 'text', text: quoteData.error };
+    } else {
+      return createQuoteFlexMessage(quoteData);
+    }
+  }
+
+  // AI 對話
+  const reply = await askGemini(userText);
+  return { type: 'text', text: reply };
+}
+
+// Vercel Serverless Function
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).end();
+    return;
+  }
+
+  const signature = req.headers['x-line-signature'];
+  if (!signature) {
+    res.status(401).end();
+    return;
+  }
+
+  try {
+    await line.middleware(lineConfig)(req, res, async () => {
+      const events = req.body.events;
+      await Promise.all(
+        events.map(async (event) => {
+          try {
+            const result = await handleEvent(event);
+            if (result) {
+              await client.replyMessage(event.replyToken, result);
+            }
+          } catch (err) {
+            console.error(`Error handling event: ${err}`);
+          }
+        })
+      );
+      res.status(200).end();
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).end();
+  }
+}; 
