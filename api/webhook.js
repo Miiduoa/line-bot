@@ -3,6 +3,8 @@ const line = require('@line/bot-sdk');
 const axios = require('axios');
 const reminderService = require('./reminderService');
 const reminderTemplate = require('./reminderTemplate');
+const newsService = require('./newsService');
+const newsTemplate = require('./newsTemplate');
 
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
@@ -316,6 +318,27 @@ function createHelpMessage() {
                   }
                 ],
                 margin: 'md'
+              },
+              {
+                type: 'box',
+                layout: 'baseline',
+                contents: [
+                  {
+                    type: 'text',
+                    text: '新聞 [類別]',
+                    weight: 'bold',
+                    flex: 0,
+                    margin: 'sm' 
+                  },
+                  {
+                    type: 'text',
+                    text: '瀏覽最新新聞',
+                    size: 'sm',
+                    color: '#666666',
+                    margin: 'md'
+                  }
+                ],
+                margin: 'md'
               }
             ]
           },
@@ -373,6 +396,17 @@ function createHelpMessage() {
             style: 'secondary',
             margin: 'md',
             color: '#4682B4'
+          },
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '瀏覽新聞',
+              text: '新聞'
+            },
+            style: 'secondary',
+            margin: 'md',
+            color: '#2E8B57'
           }
         ]
       }
@@ -917,6 +951,58 @@ async function handleEvent(event) {
     } catch (error) {
       console.error('新增提醒時出錯:', error);
       return { type: 'text', text: '設定提醒時發生錯誤，請稍後再試。' };
+    }
+  }
+
+  // 新聞功能
+  // 新聞功能幫助說明
+  if (userText === '新聞說明' || userText === '新聞幫助') {
+    return newsTemplate.createNewsHelpMessage();
+  }
+
+  // 新聞分類選單
+  if (userText === '新聞') {
+    return newsTemplate.createNewsCategoryMenu();
+  }
+
+  // 頭條新聞
+  if (userText === '新聞 頭條' || userText === '頭條新聞') {
+    try {
+      const articles = await newsService.getTopHeadlines();
+      return newsTemplate.createNewsListMessage(articles, '頭條新聞');
+    } catch (error) {
+      console.error('獲取頭條新聞時出錯:', error);
+      return { type: 'text', text: '獲取頭條新聞失敗，請稍後再試。' };
+    }
+  }
+
+  // 分類新聞
+  const categoryMatch = userText.match(/^新聞\s+(.+)$/);
+  if (categoryMatch) {
+    const category = categoryMatch[1];
+    
+    if (category in newsService.newsCategories) {
+      try {
+        const categoryCode = newsService.getCategoryCode(category);
+        const articles = await newsService.getCategoryNews(categoryCode);
+        return newsTemplate.createNewsListMessage(articles, `${category}新聞`);
+      } catch (error) {
+        console.error(`獲取${category}新聞時出錯:`, error);
+        return { type: 'text', text: `獲取${category}新聞失敗，請稍後再試。` };
+      }
+    }
+  }
+
+  // 新聞搜尋
+  const searchMatch = userText.match(/^新聞搜尋\s+(.+)$/);
+  if (searchMatch) {
+    const query = searchMatch[1];
+    try {
+      const articles = await newsService.searchNews(query);
+      return newsTemplate.createNewsListMessage(articles, `"${query}" 相關新聞`);
+    } catch (error) {
+      console.error(`搜尋新聞 "${query}" 時出錯:`, error);
+      return { type: 'text', text: `搜尋新聞失敗，請稍後再試。` };
     }
   }
 
