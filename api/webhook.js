@@ -693,89 +693,72 @@ function createMovieFlexMessage(movie) {
   };
 }
 
-// 調用Gemini API獲取回复
+// 更新Gemini函數以支持對話歷史
 async function askGemini(text, userId) {
   try {
     // 獲取用戶的對話歷史
-    let history = await conversationService.getUserConversation(userId);
+    const conversation = await conversationService.getUserConversation(userId);
     
-    // 添加用戶的新消息到對話歷史
+    // 將用戶的新消息添加到對話歷史
     await conversationService.addMessageToConversation(userId, 'user', text);
-
-    // 構建Gemini API的請求負載
-    let contents = [];
     
-    // 添加歷史對話作為對話上下文
-    if (history.length > 0) {
-      history.forEach(msg => {
-        contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text }]
-        });
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    const headers = { 'Content-Type': 'application/json' };
+    
+    // 正確構建payload格式
+    const contents = [];
+    
+    // 添加初始系統提示
+    contents.push({
+      role: 'user',
+      parts: [{ text: '請使用繁體中文回答。在回答中不要提到你是AI或語言模型。不要加入過多的解釋或前言。' }]
+    });
+    
+    // 添加機器人的回應
+    contents.push({
+      role: 'model',
+      parts: [{ text: '好的，我會使用繁體中文，直接回答問題，不會提及自己是AI。' }]
+    });
+    
+    // 按照對話順序添加過去的對話
+    for (const message of conversation) {
+      contents.push({
+        role: message.role === 'user' ? 'user' : 'model',
+        parts: [{ text: message.text }]
       });
     }
     
-    // 添加當前用戶消息
+    // 添加當前用戶問題
     contents.push({
       role: 'user',
       parts: [{ text }]
     });
-
+    
     const payload = {
-      contents,
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        }
-      ]
+      contents: contents,
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 1000
+      }
     };
-
-    // 發送請求到Gemini API
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      payload
-    );
-
-    // 檢查回應是否包含內容
-    if (response.data && 
-        response.data.candidates && 
-        response.data.candidates[0] && 
-        response.data.candidates[0].content && 
-        response.data.candidates[0].content.parts && 
-        response.data.candidates[0].content.parts[0] && 
-        response.data.candidates[0].content.parts[0].text) {
-      const aiResponse = response.data.candidates[0].content.parts[0].text;
-      
-      // 將AI的回复添加到對話歷史
-      await conversationService.addMessageToConversation(userId, 'assistant', aiResponse);
-      
-      return aiResponse;
-    } else {
-      console.error('無效的Gemini API回應:', JSON.stringify(response.data));
-      return '我目前遇到了一些問題，請稍後再試。';
-    }
-  } catch (error) {
-    console.error('Gemini API錯誤:', error);
     
-    // 檢查是否為連接問題
-    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
-      return '無法連接到AI服務，請檢查您的網絡連接或稍後再試。';
-    }
+    console.log('發送到Gemini的對話內容:', JSON.stringify(contents));
     
-    return '抱歉，處理您的請求時發生錯誤。請稍後再試。';
+    const { data } = await axios.post(endpoint, payload, { headers });
+    
+    const resp = data.candidates && data.candidates.length > 0
+      ? data.candidates[0].content.parts.map(p => p.text).join('\n')
+      : '沒有收到回應';
+    
+    // 將AI的回應添加到對話歷史
+    await conversationService.addMessageToConversation(userId, 'assistant', resp);
+    
+    return resp;
+  } catch (err) {
+    console.error('Gemini API error:', err.response?.data || err.message);
+    return '無法連接到 Gemini API。';
   }
 }
 
@@ -917,32 +900,41 @@ async function sendReminderNotification(reminder) {
 // 啟動提醒排程檢查
 const reminderChecker = reminderService.startReminderChecker(sendReminderNotification);
 
-// 處理LINE事件
-const handleEvent = async (event) => {
+async function handleEvent(event) {
+  // 處理postback事件（例如按鈕點擊）
+  if (event.type === 'postback') {
+    const data = new URLSearchParams(event.postback.data);
+    const action = data.get('action');
+    
+    if (action === 'deleteReminder') {
+      const reminderId = data.get('id');
+      const deleted = await reminderService.deleteReminder(event.source.userId, reminderId);
+      if (deleted) {
+        const userReminders = await reminderService.getUserReminders(event.source.userId);
+        return reminderTemplate.createReminderListMessage(userReminders);
+      } else {
+        return { type: 'text', text: '刪除提醒失敗，請稍後再試。' };
+      }
+    }
+    
+    return null;
+  }
+  
   if (event.type !== 'message' || event.message.type !== 'text') {
-    return Promise.resolve(null);
+    return null;
   }
 
+  const userText = event.message.text.trim();
   const userId = event.source.userId;
-  const userMessage = event.message.text;
-
-  // 檢查是否為清除記憶命令
-  if (userMessage === '清除記憶' || userMessage === '忘記對話') {
-    await conversationService.clearUserConversation(userId);
-    return client.replyMessage(event.replyToken, {
-      type: 'text',
-      text: '我已經清除了我們之間的對話記憶。讓我們開始新的對話吧！'
-    });
-  }
 
   // 幫助命令
-  if (userMessage === '幫助' || userMessage === 'help') {
+  if (userText === '幫助' || userText === 'help') {
     return createHelpMessage();
   }
 
   // 天氣查詢
-  if (/^天氣\s+/.test(userMessage)) {
-    const location = userMessage.replace(/^天氣\s+/, '');
+  if (/^天氣\s+/.test(userText)) {
+    const location = userText.replace(/^天氣\s+/, '');
     const weatherData = await getCWAWeatherData(location);
     if (weatherData.error) {
       return { type: 'text', text: weatherData.error };
@@ -952,8 +944,8 @@ const handleEvent = async (event) => {
   }
 
   // 電影查詢
-  if (/^電影\s+/.test(userMessage)) {
-    const title = userMessage.replace(/^電影\s+/, '');
+  if (/^電影\s+/.test(userText)) {
+    const title = userText.replace(/^電影\s+/, '');
     const movieData = await getMovieData(title);
     if (movieData.error) {
       return { type: 'text', text: movieData.error };
@@ -963,7 +955,7 @@ const handleEvent = async (event) => {
   }
 
   // 名言功能
-  if (userMessage === '名言' || userMessage === 'quote') {
+  if (userText === '名言' || userText === 'quote') {
     const quoteData = await getRandomQuote();
     if (quoteData.error) {
       return { type: 'text', text: quoteData.error };
@@ -973,19 +965,19 @@ const handleEvent = async (event) => {
   }
   
   // 提醒功能幫助說明
-  if (userMessage === '提醒說明' || userText === '提醒幫助') {
+  if (userText === '提醒說明' || userText === '提醒幫助') {
     return reminderTemplate.createReminderHelpMessage();
   }
   
   // 查看我的提醒列表
-  if (userMessage === '我的提醒' || userMessage === '查看提醒') {
+  if (userText === '我的提醒' || userText === '查看提醒') {
     const userReminders = await reminderService.getUserReminders(userId);
     return reminderTemplate.createReminderListMessage(userReminders);
   }
   
   // 設定提醒 (使用格式如 "提醒我 明天下午3點 繳電話費")
-  if (/^提醒(我)?\s+/.test(userMessage)) {
-    const reminderInfo = reminderService.parseReminderText(userMessage);
+  if (/^提醒(我)?\s+/.test(userText)) {
+    const reminderInfo = reminderService.parseReminderText(userText);
     
     if (!reminderInfo) {
       return { 
@@ -1010,17 +1002,17 @@ const handleEvent = async (event) => {
 
   // 新聞功能
   // 新聞功能幫助說明
-  if (userMessage === '新聞說明' || userMessage === '新聞幫助') {
+  if (userText === '新聞說明' || userText === '新聞幫助') {
     return newsTemplate.createNewsHelpMessage();
   }
 
   // 新聞分類選單
-  if (userMessage === '新聞') {
+  if (userText === '新聞') {
     return newsTemplate.createNewsCategoryMenu();
   }
 
   // 頭條新聞
-  if (userMessage === '新聞 頭條' || userMessage === '頭條新聞') {
+  if (userText === '新聞 頭條' || userText === '頭條新聞') {
     try {
       const articles = await newsService.getTopHeadlines();
       return newsTemplate.createNewsListMessage(articles, '頭條新聞');
@@ -1031,7 +1023,7 @@ const handleEvent = async (event) => {
   }
 
   // 分類新聞
-  const categoryMatch = userMessage.match(/^新聞\s+(.+)$/);
+  const categoryMatch = userText.match(/^新聞\s+(.+)$/);
   if (categoryMatch) {
     const category = categoryMatch[1];
     
@@ -1048,7 +1040,7 @@ const handleEvent = async (event) => {
   }
 
   // 新聞搜尋
-  const searchMatch = userMessage.match(/^新聞搜尋\s+(.+)$/);
+  const searchMatch = userText.match(/^新聞搜尋\s+(.+)$/);
   if (searchMatch) {
     const query = searchMatch[1];
     try {
@@ -1060,8 +1052,14 @@ const handleEvent = async (event) => {
     }
   }
 
+  // 處理「清除記憶」命令
+  if (userText === '清除記憶' || userText === '忘記對話') {
+    await conversationService.clearUserConversation(userId);
+    return { type: 'text', text: '已清除所有對話記憶。' };
+  }
+
   // 在調用askGemini時傳遞userId
-  const reply = await askGemini(userMessage, userId);
+  const reply = await askGemini(userText, userId);
   return { type: 'text', text: reply };
 }
 
