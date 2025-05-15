@@ -1,54 +1,84 @@
-# LINE 機器人
+# LINE Gemini Bot
 
-這是一個具有天氣查詢、電影資訊和 AI 聊天功能的 LINE 機器人，使用精美的 Flex Message 介面。
+基於 Google Gemini AI 的 LINE 聊天機器人，具備上下文理解能力，適合部署在 Vercel 平台。
 
-## 功能
+## 功能特點
 
-- **幫助**: 傳送「幫助」或「help」獲取功能使用說明
-- **天氣查詢**: 傳送「天氣 城市名稱」獲取當前天氣，以美觀的卡片呈現
-- **電影資訊**: 傳送「電影 電影名稱」獲取電影信息，包含海報和詳細資料
-- **AI 對話**: 其他訊息將透過 Google Gemini AI 回應
+- 使用 Google Gemini 1.5 Flash 模型進行自然語言處理
+- 記住對話歷史，保持上下文連貫性
+- 適配 Vercel 平台部署，確保穩定運行
 
 ## 設置步驟
 
-1. 創建 LINE 頻道（在 [LINE Developers](https://developers.line.biz/) 平台）
-2. 在 `.env` 檔案中填入你的密鑰：
-   ```
-   LINE_CHANNEL_SECRET=你的頻道密鑰
-   LINE_CHANNEL_ACCESS_TOKEN=你的頻道存取令牌
-   WEATHER_API_KEY=你的中央氣象署API授權碼
-   TMDB_API_KEY=你的TMDB API密鑰
-   GEMINI_API_KEY=你的Google Gemini API密鑰
-   ```
-3. 安裝相依套件：
+### 1. LINE Developer 設置
+
+1. 前往 [LINE Developers Console](https://developers.line.biz/console/)
+2. 創建一個新的提供者和頻道（Messaging API）
+3. 獲取頻道密鑰（Channel Secret）和頻道訪問令牌（Channel Access Token）
+4. 設置 Webhook URL 為你的 Vercel 部署 URL + `/webhook`
+   例如：`https://your-vercel-app.vercel.app/webhook`
+
+### 2. Google AI Studio 設置
+
+1. 前往 [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. 創建一個 API 密鑰
+3. 保存 API 密鑰用於下一步
+
+### 3. 本地開發設置
+
+1. 克隆本倉庫
+2. 安裝依賴：
    ```
    npm install
    ```
-4. 啟動服務：
+3. 複製 `.env.example` 到 `.env` 並填入你的憑證：
    ```
-   npm start
+   LINE_CHANNEL_SECRET=你的LINE頻道密鑰
+   LINE_CHANNEL_ACCESS_TOKEN=你的LINE頻道訪問令牌
+   GEMINI_API_KEY=你的Google Gemini API密鑰
+   PORT=3000
    ```
-5. 使用 ngrok 或其他工具將服務暴露到網際網路，並將 webhook 設定為 `https://你的網域/webhook`
+4. 啟動開發服務器：
+   ```
+   npm run dev
+   ```
+5. 使用 ngrok 等工具創建臨時 HTTPS URL 用於開發測試
 
-## LINE 頻道設定
+### 4. Vercel 部署
 
-1. 在 [LINE Developers](https://developers.line.biz/) 創建一個 Provider
-2. 創建一個 Messaging API 頻道
-3. 取得 Channel Secret 和 Channel Access Token 填入 `.env` 檔案
-4. 設定 Webhook URL 為 `https://你的網域/webhook`
-5. 開啟 "Use webhook" 設定
-6. 選擇加入好友
+1. 安裝 Vercel CLI：
+   ```
+   npm i -g vercel
+   ```
+2. 登錄 Vercel：
+   ```
+   vercel login
+   ```
+3. 部署項目：
+   ```
+   vercel --prod
+   ```
+4. 在 Vercel 項目設置中添加環境變量：
+   - `LINE_CHANNEL_SECRET`
+   - `LINE_CHANNEL_ACCESS_TOKEN`
+   - `GEMINI_API_KEY`
 
-## API 申請
+5. 在 LINE Developers Console 中更新 Webhook URL 為你的 Vercel 部署 URL + `/webhook`
 
-- [中央氣象署開放資料平台](https://opendata.cwa.gov.tw/) - 提供台灣天氣資訊
-- [TMDB API](https://www.themoviedb.org/documentation/api) - 提供電影資訊
-- [Google Gemini API](https://ai.google.dev/gemini) - 提供 AI 聊天功能
+## 故障排除
 
-## Flex Message
+- **Webhook 驗證失敗**: 確保 Webhook URL 正確並以 `https://` 開頭
+- **機器人無回應**: 檢查環境變量是否正確設置
+- **部署問題**: 檢查 Vercel 日誌以獲取更多信息
 
-本機器人使用 LINE 的 Flex Message 功能提供豐富的互動體驗：
+## 主要文件結構
 
-- 天氣回應：顯示溫度、降雨機率、舒適度和天氣圖示
-- 電影回應：顯示電影海報、評分、上映日期和劇情簡介
-- 幫助選單：提供快速使用範例和按鈕 
+- `index.js`: 主程序入口
+- `.env`: 環境變量配置
+- `vercel.json`: Vercel 部署配置
+
+## 注意事項
+
+- 在生產環境中，建議使用數據庫來存儲對話歷史而非內存存儲
+- Gemini API 可能有使用限制和收費標準，請參考 Google AI 文檔
+- LINE Messaging API 也有使用限制，請查閱 LINE 開發者文檔 
