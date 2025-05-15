@@ -1,7 +1,7 @@
 {
   "name": "line-bot",
   "version": "1.0.0",
-  "description": "LINE Bot with weather, movie info and AI chat features",
+  "description": "LINE Bot with weather, movie info, AI chat, and reminder features",
   "main": "api/webhook.js",
   "scripts": {
     "start": "node api/webhook.js",
@@ -10,7 +10,9 @@
   "dependencies": {
     "@line/bot-sdk": "^7.5.2",
     "axios": "^1.6.7",
-    "dotenv": "^16.4.5"
+    "date-fns": "^3.3.1",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
@@ -18,4 +20,4 @@
   "engines": {
     "node": ">=18.0.0"
   }
-} 
+}

@@ -1,6 +1,8 @@
 require('dotenv').config();
 const line = require('@line/bot-sdk');
 const axios = require('axios');
+const reminderService = require('./reminderService');
+const reminderTemplate = require('./reminderTemplate');
 
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
@@ -293,6 +295,27 @@ function createHelpMessage() {
                   }
                 ],
                 margin: 'md'
+              },
+              {
+                type: 'box',
+                layout: 'baseline',
+                contents: [
+                  {
+                    type: 'text',
+                    text: '提醒 [時間] [事項]',
+                    weight: 'bold',
+                    flex: 0,
+                    margin: 'sm' 
+                  },
+                  {
+                    type: 'text',
+                    text: '設定提醒事項',
+                    size: 'sm',
+                    color: '#666666',
+                    margin: 'md'
+                  }
+                ],
+                margin: 'md'
               }
             ]
           },
@@ -339,6 +362,17 @@ function createHelpMessage() {
             style: 'secondary',
             margin: 'md',
             color: '#27ACB2'
+          },
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '提醒功能',
+              text: '提醒說明'
+            },
+            style: 'secondary',
+            margin: 'md',
+            color: '#4682B4'
           }
         ]
       }
@@ -771,12 +805,47 @@ function createQuoteFlexMessage(quoteData) {
   };
 }
 
+// 當有用戶需要提醒時，LINE機器人會主動發訊息
+async function sendReminderNotification(reminder) {
+  try {
+    const message = reminderTemplate.createReminderNotificationMessage(reminder);
+    await client.pushMessage(reminder.userId, message);
+    return true;
+  } catch (error) {
+    console.error('發送提醒通知時出錯:', error);
+    return false;
+  }
+}
+
+// 啟動提醒排程檢查
+const reminderChecker = reminderService.startReminderChecker(sendReminderNotification);
+
 async function handleEvent(event) {
+  // 處理postback事件（例如按鈕點擊）
+  if (event.type === 'postback') {
+    const data = new URLSearchParams(event.postback.data);
+    const action = data.get('action');
+    
+    if (action === 'deleteReminder') {
+      const reminderId = data.get('id');
+      const deleted = await reminderService.deleteReminder(event.source.userId, reminderId);
+      if (deleted) {
+        const userReminders = await reminderService.getUserReminders(event.source.userId);
+        return reminderTemplate.createReminderListMessage(userReminders);
+      } else {
+        return { type: 'text', text: '刪除提醒失敗，請稍後再試。' };
+      }
+    }
+    
+    return null;
+  }
+  
   if (event.type !== 'message' || event.message.type !== 'text') {
     return null;
   }
 
   const userText = event.message.text.trim();
+  const userId = event.source.userId;
 
   // 幫助命令
   if (userText === '幫助' || userText === 'help') {
@@ -814,8 +883,44 @@ async function handleEvent(event) {
       return createQuoteFlexMessage(quoteData);
     }
   }
+  
+  // 提醒功能幫助說明
+  if (userText === '提醒說明' || userText === '提醒幫助') {
+    return reminderTemplate.createReminderHelpMessage();
+  }
+  
+  // 查看我的提醒列表
+  if (userText === '我的提醒' || userText === '查看提醒') {
+    const userReminders = await reminderService.getUserReminders(userId);
+    return reminderTemplate.createReminderListMessage(userReminders);
+  }
+  
+  // 設定提醒 (使用格式如 "提醒我 明天下午3點 繳電話費")
+  if (/^提醒(我)?\s+/.test(userText)) {
+    const reminderInfo = reminderService.parseReminderText(userText);
+    
+    if (!reminderInfo) {
+      return { 
+        type: 'text', 
+        text: '無法理解提醒格式。請使用「提醒我 明天下午3點 繳電話費」或「提醒 5/20 下午2點 去看醫生」之類的格式。' 
+      };
+    }
+    
+    try {
+      const reminder = await reminderService.addReminder(
+        userId, 
+        reminderInfo.title,
+        reminderInfo.dateTime
+      );
+      
+      return reminderTemplate.createReminderConfirmationMessage(reminder);
+    } catch (error) {
+      console.error('新增提醒時出錯:', error);
+      return { type: 'text', text: '設定提醒時發生錯誤，請稍後再試。' };
+    }
+  }
 
-  // AI 對話
+  // AI 對話 (預設回應)
   const reply = await askGemini(userText);
   return { type: 'text', text: reply };
 }
