@@ -6,6 +6,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Initialize the app
 const app = express();
 
+// Enable JSON body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // LINE Bot configuration
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
@@ -22,14 +26,31 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 // Memory storage for conversation context (in production, use a database)
 const conversationHistory = {};
 
+// Health check endpoint for Vercel
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'LINE Bot is running' });
+});
+
 // LINE webhook middleware
-app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
+app.post('/webhook', async (req, res) => {
   try {
-    await Promise.all(req.body.events.map(handleEvent));
-    res.status(200).end();
+    // Verify signature
+    const signature = req.headers['x-line-signature'];
+    if (!signature) {
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+
+    if (!line.validateSignature(JSON.stringify(req.body), lineConfig.channelSecret, signature)) {
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+
+    // Process events
+    const events = req.body.events || [];
+    await Promise.all(events.map(handleEvent));
+    return res.status(200).json({ status: 'OK' });
   } catch (err) {
     console.error('Error handling events:', err);
-    res.status(500).end();
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -94,13 +115,13 @@ async function handleEvent(event) {
   }
 }
 
-// Health check endpoint for Vercel
-app.get('/', (req, res) => {
-  res.status(200).json({ status: 'OK' });
-});
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-}); 
+// For Vercel serverless deployment
+module.exports = app; 
