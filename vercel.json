@@ -9,12 +9,20 @@
   "routes": [
     {
       "src": "/webhook",
-      "methods": ["POST"],
-      "dest": "index.js"
+      "dest": "/index.js",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/test-gemini",
+      "dest": "/index.js",
+      "methods": ["GET"]
     },
     {
       "src": "/(.*)",
-      "dest": "index.js"
+      "dest": "/index.js"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 } 
