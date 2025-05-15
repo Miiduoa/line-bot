@@ -12,11 +12,6 @@ const client = new line.Client(lineConfig);
 const app = express();
 app.use(express.json());
 
-// 增加根路徑的回應，用於Vercel健康檢查
-app.get('/', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'LINE Bot is running!' });
-});
-
 app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
   try {
     const events = req.body.events;
@@ -675,13 +670,7 @@ async function askGemini(text) {
   }
 }
 
-// 為了支援Vercel serverless函數，需要匯出app
 const port = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(port, () => {
-    console.log(`LINE Bot running on port ${port}`);
-  });
-}
-
-// 匯出Express應用程式給Vercel
-module.exports = app; 
+app.listen(port, () => {
+  console.log(`LINE Bot running on port ${port}`);
+}); 

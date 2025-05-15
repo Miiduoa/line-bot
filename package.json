@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "LINE Bot with weather, movie, and Gemini AI features",
   "main": "index.js",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js",
-    "deploy": "vercel --prod"
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "@line/bot-sdk": "^7.5.2",
