@@ -1,54 +1,56 @@
-# LINE 機器人
+# LINE Bot on Vercel
 
-這是一個多功能的 LINE 機器人，可以：
-- 查詢天氣（例如：「天氣 台北」）
-- 查詢電影資訊（例如：「電影 復仇者聯盟」）
-- 與 Google Gemini AI 進行對話
+這是一個使用 Node.js 開發，並部署在 Vercel 上的 LINE Bot 專案。
+
+## 功能
+
+- 天氣查詢：傳送「天氣 [城市名]」或「weather [city]」可查詢天氣
+- 電影查詢：傳送「電影 [電影名]」或「movie [title]」可查詢電影資訊
+- 新聞查詢：傳送「新聞 [關鍵字]」或「news [keyword]」可查詢相關新聞
+- 智能對話：傳送任何其他訊息，會使用 Google Gemini AI 回應
+
+## 專案結構
+
+```
+project-root/
+├── .env                  # 環境變數
+├── package.json          # 專案配置
+├── config.js             # 配置文件
+├── api/
+│   └── webhook.js        # LINE Webhook 處理 (Vercel Serverless Function)
+└── handlers/
+    ├── weather.js        # 天氣處理模組
+    ├── movie.js          # 電影處理模組
+    ├── news.js           # 新聞處理模組
+    └── chatgpt.js        # Gemini AI 處理模組
+```
 
 ## 本地開發
 
 1. 安裝依賴：
-   ```
-   npm install
-   ```
+```
+npm install
+```
 
-2. 在 `.env` 文件中填入你的 API 密鑰：
-   ```
-   LINE_CHANNEL_SECRET=你的LINE頻道密鑰
-   LINE_CHANNEL_ACCESS_TOKEN=你的LINE存取令牌
-   WEATHER_API_KEY=你的OpenWeatherMap API金鑰
-   TMDB_API_KEY=你的TheMovieDB API金鑰
-   GEMINI_API_KEY=你的Google Gemini API金鑰
-   ```
-
-3. 啟動本地開發服務器：
-   ```
-   npm run dev
-   ```
+2. 啟動開發環境：
+```
+npm run dev
+```
 
 ## 部署到 Vercel
 
-1. 安裝 Vercel CLI：
-   ```
-   npm i -g vercel
-   ```
+```
+npm run deploy
+```
 
-2. 登入 Vercel：
-   ```
-   vercel login
-   ```
+## 環境變數設定
 
-3. 部署：
-   ```
-   vercel --prod
-   ```
+在 Vercel 的專案設定中，添加以下環境變數：
 
-4. 在 LINE Developers 控制台中，將 Webhook URL 設定為：
-   ```
-   https://你的-vercel-域名.vercel.app/api/webhook
-   ```
-
-## 注意事項
-
-- 對話歷史記錄儲存在記憶體中，服務器重啟後將丟失
-- 確保所有 API 密鑰都有效並且有足夠的配額 
+- `LINE_CHANNEL_SECRET`
+- `LINE_CHANNEL_ACCESS_TOKEN`
+- `LINE_CHANNEL_ID`
+- `OPENWEATHER_API_KEY`
+- `TMDB_API_KEY`
+- `NEWSAPI_KEY`
+- `GEMINI_API_KEY` 

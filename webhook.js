@@ -1,94 +1,83 @@
-require('dotenv').config();
+// api/webhook.js
 const { Client, middleware } = require('@line/bot-sdk');
-const axios = require('axios');
+const config = require('../config');
+const weatherHandler = require('../handlers/weather');
+const movieHandler = require('../handlers/movie');
+const newsHandler = require('../handlers/news');
+const chatgptHandler = require('../handlers/chatgpt');
+
+// 簡易上下文儲存（正式建議 Redis/DB）
+const sessions = {};
 
 const lineConfig = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.LINE_CHANNEL_SECRET,
+  channelSecret: config.LINE_CHANNEL_SECRET,
+  channelAccessToken: config.LINE_CHANNEL_ACCESS_TOKEN
 };
+
 const client = new Client(lineConfig);
 
-// In-memory session store
-const sessions = new Map();
-
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
+  // 驗證 LINE 的簽名
+  const signature = req.headers['x-line-signature'];
+  
+  // 如果沒有簽名，返回 400
+  if (!signature) {
+    return res.status(400).send('Bad Request');
   }
-
-  // LINE middleware for signature validation
-  try {
-    await middleware(lineConfig)(req, res, async () => {
-      const events = req.body.events;
-      await Promise.all(events.map(handleEvent));
-    });
-    if (!res.writableEnded) res.status(200).end();
-  } catch (err) {
-    console.error(err);
-    if (!res.writableEnded) res.status(500).end();
+  
+  // 驗證簽名
+  const body = JSON.stringify(req.body);
+  const events = req.body.events;
+  
+  // 如果沒有事件，返回 200
+  if (!events || !events.length) {
+    return res.status(200).send('OK');
   }
-};
-
-async function handleEvent(event) {
-  if (event.type !== 'message' || event.message.type !== 'text') return;
-
-  const userId = event.source.userId;
-  const text = event.message.text.trim();
-  const history = sessions.get(userId) || [];
-  let reply;
-
-  if (/^天氣\s+/.test(text)) {
-    const city = text.replace(/^天氣\s+/, '');
-    reply = await getWeather(city);
-  } else if (/^電影\s+/.test(text)) {
-    const title = text.replace(/^電影\s+/, '');
-    reply = await getMovieInfo(title);
-  } else {
-    history.push({ author: 'user', content: text });
-    reply = await askGemini(history);
-    history.push({ author: 'assistant', content: reply });
-    if (history.length > 20) history.splice(0, history.length - 20);
-    sessions.set(userId, history);
-  }
-
-  await client.replyMessage(event.replyToken, { type: 'text', text: reply });
-}
-
-async function getWeather(city) {
-  try {
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&lang=zh_tw&appid=${process.env.WEATHER_API_KEY}`;
-    const { data } = await axios.get(url);
-    return `${data.name} 天氣：${data.weather[0].description}，氣溫：${data.main.temp}°C`;
-  } catch {
-    return '查詢天氣失敗，請確認城市名稱。';
-  }
-}
-
-async function getMovieInfo(title) {
-  try {
-    const url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.TMDB_API_KEY}&language=zh-TW&query=${encodeURIComponent(title)}`;
-    const { data } = await axios.get(url);
-    if (!data.results.length) return '找不到相關電影。';
-    const m = data.results[0];
-    return `《${m.title}》 (${m.release_date})\n評分：${m.vote_average}\n${m.overview}`;
-  } catch {
-    return '查詢電影失敗。';
-  }
-}
-
-async function askGemini(history) {
-  try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/chat-bison-001:generateMessage?key=${process.env.GEMINI_API_KEY}`;
-    const payload = {
-      model: 'models/chat-bison-001',
-      prompt: { messages: history.map(m => ({ author: m.author, content: m.content })) },
-      temperature: 0.7,
-      maxOutputTokens: 512
-    };
-    const { data } = await axios.post(endpoint, payload);
-    return data.candidates.length ? data.candidates[0].content : '沒有回應';
-  } catch {
-    return '無法連接到 Gemini API。';
-  }
-} 
+  
+  // 處理每個事件
+  await Promise.all(
+    events.map(async (event) => {
+      if (event.type !== 'message' || event.message.type !== 'text') {
+        return;
+      }
+      
+      const userId = event.source.userId;
+      const groupId = event.source.groupId || userId;
+      const text = event.message.text.trim();
+      
+      // 初始化 session
+      if (!sessions[groupId]) {
+        sessions[groupId] = [];
+      }
+      
+      let reply;
+      
+      // 指令判斷
+      if (text.toLowerCase().startsWith('天氣') || text.toLowerCase().startsWith('weather')) {
+        reply = await weatherHandler.getWeather(text, config);
+      } else if (text.toLowerCase().startsWith('電影') || text.toLowerCase().startsWith('movie')) {
+        reply = await movieHandler.getMovie(text, config);
+      } else if (text.toLowerCase().startsWith('新聞') || text.toLowerCase().startsWith('news')) {
+        reply = await newsHandler.getNews(text, config);
+      } else {
+        // 搭訕對話
+        sessions[groupId].push({ role: 'user', content: text });
+        reply = await chatgptHandler.chatWithGemini(sessions[groupId], config);
+        sessions[groupId].push({ role: 'assistant', content: reply });
+        
+        // 限制歷史長度
+        if (sessions[groupId].length > 20) {
+          sessions[groupId].shift();
+        }
+      }
+      
+      // 回覆訊息
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: reply
+      });
+    })
+  );
+  
+  return res.status(200).send('OK');
+}; 
