@@ -1,34 +1,42 @@
-# LINE 聊天機器人
+# LINE Bot 多功能助手
 
-這是一個具有多功能的 LINE 聊天機器人，包括：
+一個結合多種功能的 LINE 聊天機器人，包括：
 
-- 天氣查詢功能 (使用 OpenWeatherMap API)
-- 電影資訊查詢 (使用 TheMovieDB API)
-- 聊天對話 (使用 Google Gemini API)
+1. 天氣查詢 - 發送「天氣 城市名」可獲取當前天氣狀況
+2. 電影資訊 - 發送「電影 電影名」可獲取電影資訊
+3. AI 聊天 - 任何其他訊息都會透過 Google Gemini AI 回應
+
+## 安裝與設置
+
+1. 安裝依賴：
+   ```
+   npm install
+   ```
+
+2. 設置環境變數：
+   在 `.env` 文件中填入以下資訊
+   ```
+   LINE_CHANNEL_SECRET=<你的 LINE_CHANNEL_SECRET>
+   LINE_CHANNEL_ACCESS_TOKEN=<你的 LINE_CHANNEL_ACCESS_TOKEN>
+   WEATHER_API_KEY=<你的 OpenWeatherMap API Key>
+   TMDB_API_KEY=<你的 TMDB API Key>
+   GEMINI_API_KEY=<你的 Gemini API Key>
+   ```
+
+3. 本地開發：
+   ```
+   npm run dev
+   ```
+
+4. 部署到 Vercel：
+   ```
+   npm run deploy
+   ```
 
 ## 使用方法
 
-- 天氣查詢: 發送 `天氣 城市名稱` (例如: `天氣 台北`)
-- 電影查詢: 發送 `電影 電影名稱` (例如: `電影 鐵達尼號`)
-- 一般對話: 直接發送任何其他訊息
+在 LINE 上加入機器人為好友後，可以發送以下訊息：
 
-## 部署說明
-
-1. 安裝相依套件:
-```
-npm install
-```
-
-2. 設定環境變數:
-- LINE_CHANNEL_SECRET
-- LINE_CHANNEL_ACCESS_TOKEN
-- WEATHER_API_KEY (OpenWeatherMap)
-- TMDB_API_KEY (TheMovieDB)
-- GEMINI_API_KEY (Google Gemini)
-
-3. 部署到 Vercel:
-```
-npm run deploy
-```
-
-4. 在 LINE Developers 控制台設定 Webhook URL: `https://你的vercel網址/api/webhook` 
+- `天氣 台北` - 查詢台北市的天氣
+- `電影 復仇者聯盟` - 查詢電影《復仇者聯盟》的資訊
+- 任何其他訊息 - 會透過 AI 進行回覆 
