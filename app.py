@@ -2,51 +2,150 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-from handlers.weather import get_weather
-from handlers.movie import get_movie
-from handlers.news import get_news
-from handlers.chatgpt import chat_with_gemini
+import os
 import config
+import google.generativeai as genai
+from pyowm import OWM
+from tmdbv3api import TMDb, Movie
+from newsapi import NewsApiClient
 
+# Initialize Flask app
 app = Flask(__name__)
-line_api = LineBotApi(config.Config.LINE_CHANNEL_ACCESS_TOKEN)
-parser = WebhookHandler(config.Config.LINE_CHANNEL_SECRET)
 
-# 簡易上下文存放
-sessions = {}
+# Initialize LINE API clients
+line_bot_api = LineBotApi(config.CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(config.CHANNEL_SECRET)
 
-@app.route("/", methods=['POST'])
-def webhook():   # 注意：VercelWsgi 會把 /api/webhook 對到這裡
-    signature = request.headers.get('X-Line-Signature', '')
-    body = request.get_data(as_text=True)
+# Initialize weather API client
+owm = OWM(config.OWM_API_KEY)
+mgr = owm.weather_manager()
+
+# Initialize movie API client
+tmdb = TMDb()
+tmdb.api_key = config.TMDB_API_KEY
+movie = Movie()
+
+# Initialize news API client
+newsapi = NewsApiClient(api_key=config.NEWSAPI_KEY)
+
+# Initialize Gemini API
+genai.configure(api_key=config.GOOGLE_GEMINI_KEY)
+
+# Simple in-memory storage for chat histories
+# Format: {user_id: [message_dicts]}
+chat_histories = {}
+
+# Weather function
+def get_weather(city: str) -> str:
     try:
-        events = parser.parse(body, signature)
+        obs = mgr.weather_at_place(city)
+        w = obs.weather
+        return f"{city} 現在 {w.detailed_status}，溫度 {w.temperature('celsius')['temp']}°C"
+    except Exception as e:
+        return f"無法獲取 {city} 的天氣資訊：{str(e)}"
+
+# Movie search function
+def search_movie(query: str) -> str:
+    try:
+        res = movie.search(query)
+        if not res: 
+            return "找不到相關電影。"
+        m = res[0]
+        return f"{m.title} ({m.release_date[:4]})\n評分: {m.vote_average}/10"
+    except Exception as e:
+        return f"搜尋電影時發生錯誤：{str(e)}"
+
+# News function
+def get_news() -> str:
+    try:
+        top = newsapi.get_top_headlines(country='tw', page_size=3)
+        articles = top['articles']
+        if not articles:
+            return "無法獲取最新新聞。"
+        return "\n\n".join([f"{a['title']}\n{a['url']}" for a in articles])
+    except Exception as e:
+        return f"獲取新聞時發生錯誤：{str(e)}"
+
+# Gemini AI chat function
+def flirt_with_context(text: str, user_id: str) -> str:
+    if user_id not in chat_histories:
+        chat_histories[user_id] = []
+    
+    history = chat_histories[user_id]
+    
+    try:
+        # Add the current message to history
+        history.append({'role': 'user', 'content': text})
+        
+        # Limit history to last 10 messages to avoid token limits
+        if len(history) > 10:
+            history = history[-10:]
+            
+        # Call Gemini API
+        response = genai.chat(
+            model='gemini-1.0', 
+            messages=history,
+            temperature=0.7
+        )
+        
+        # Get the response text
+        reply = response.last
+        
+        # Add AI response to history
+        history.append({'role': 'model', 'content': reply})
+        
+        # Update the history
+        chat_histories[user_id] = history
+        
+        return reply
+    except Exception as e:
+        return f"AI 對話發生錯誤：{str(e)}"
+
+# Process user input and determine which function to call
+def process_user_input(text: str, event) -> str:
+    # Get user or group ID
+    try:
+        user_id = event.source.group_id
+    except AttributeError:
+        user_id = event.source.user_id
+    
+    # Check command prefixes
+    if text.startswith("天氣 "):
+        city = text[3:].strip()
+        return get_weather(city)
+    
+    elif text.startswith("電影 "):
+        query = text[3:].strip()
+        return search_movie(query)
+    
+    elif text == "新聞":
+        return get_news()
+    
+    # If no command is detected, use Gemini AI for conversation
+    else:
+        return flirt_with_context(text, user_id)
+
+# LINE Webhook route
+@app.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers['X-Line-Signature']
+    body = request.get_data(as_text=True)
+    
+    try:
+        handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
+    
+    return 'OK'
 
-    for ev in events:
-        if ev.type == 'message' and ev.message.type == 'text':
-            text = ev.message.text.strip()
-            group = ev.source.group_id or ev.source.user_id
-            # 初始化 session
-            sessions.setdefault(group, [])
+# Message event handler
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    user_text = event.message.text
+    reply_text = process_user_input(user_text, event)
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-            if text.lower().startswith(('天氣','weather')):
-                reply = get_weather(text, config.Config)
-            elif text.lower().startswith(('電影','movie')):
-                reply = get_movie(text, config.Config)
-            elif text.lower().startswith(('新聞','news')):
-                reply = get_news(text, config.Config)
-            else:
-                sessions[group].append({'role':'user','content': text})
-                reply = chat_with_gemini(sessions[group], config.Config)
-                sessions[group].append({'role':'assistant','content': reply})
-                if len(sessions[group]) > 20:
-                    sessions[group].pop(0)
-
-            line_api.reply_message(ev.reply_token, TextSendMessage(text=reply))
-
-    return 'OK', 200
-
+# Main entry point
 if __name__ == "__main__":
-    app.run(port=3000) 
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True) 

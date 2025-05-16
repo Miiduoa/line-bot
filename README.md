@@ -1,56 +1,51 @@
-# LINE Bot on Vercel
+# LINE Bot 多功能助手
 
-這是一個使用 Node.js 開發，並部署在 Vercel 上的 LINE Bot 專案。
+一個具備天氣查詢、電影資訊、新聞摘要和 AI 聊天功能的 LINE Bot。
 
 ## 功能
 
-- 天氣查詢：傳送「天氣 [城市名]」或「weather [city]」可查詢天氣
-- 電影查詢：傳送「電影 [電影名]」或「movie [title]」可查詢電影資訊
-- 新聞查詢：傳送「新聞 [關鍵字]」或「news [keyword]」可查詢相關新聞
-- 智能對話：傳送任何其他訊息，會使用 Google Gemini AI 回應
+- **天氣查詢**：使用 OpenWeatherMap API 查詢城市天氣
+- **電影資訊**：使用 TMDb API 搜尋電影詳情
+- **新聞摘要**：透過 NewsAPI 獲取最新新聞
+- **智能對話**：使用 Google Gemini AI 進行對話
 
-## 專案結構
+## 環境準備
 
-```
-project-root/
-├── .env                  # 環境變數
-├── package.json          # 專案配置
-├── config.js             # 配置文件
-├── api/
-│   └── webhook.js        # LINE Webhook 處理 (Vercel Serverless Function)
-└── handlers/
-    ├── weather.js        # 天氣處理模組
-    ├── movie.js          # 電影處理模組
-    ├── news.js           # 新聞處理模組
-    └── chatgpt.js        # Gemini AI 處理模組
+1. 建立虛擬環境並安裝套件
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-## 本地開發
-
-1. 安裝依賴：
-```
-npm install
-```
-
-2. 啟動開發環境：
-```
-npm run dev
-```
-
-## 部署到 Vercel
+2. 設定環境變數（可創建 `.env` 檔案並使用 `python-dotenv` 載入）
 
 ```
-npm run deploy
+CHANNEL_ACCESS_TOKEN=你的LINE_Channel_Access_Token
+CHANNEL_SECRET=你的LINE_Channel_Secret
+GOOGLE_GEMINI_KEY=你的Google_Gemini_API_Key
+NEWSAPI_KEY=你的NewsAPI_Key
+TMDB_API_KEY=你的TMDb_API_Key
+OWM_API_KEY=你的OpenWeatherMap_API_Key
 ```
 
-## 環境變數設定
+## 啟動服務
 
-在 Vercel 的專案設定中，添加以下環境變數：
+```bash
+python app.py
+```
 
-- `LINE_CHANNEL_SECRET`
-- `LINE_CHANNEL_ACCESS_TOKEN`
-- `LINE_CHANNEL_ID`
-- `OPENWEATHER_API_KEY`
-- `TMDB_API_KEY`
-- `NEWSAPI_KEY`
-- `GEMINI_API_KEY` 
+服務會在 http://localhost:5000 啟動，但需要外部可訪問的 URL 用於 LINE Webhook。
+
+可使用 ngrok 等工具建立臨時公開連結：
+```bash
+ngrok http 5000
+```
+
+## 使用方法
+
+- **天氣查詢**：`天氣 台北`
+- **電影資訊**：`電影 蜘蛛人`
+- **新聞摘要**：`新聞`
+- **一般對話**：直接輸入文字即可與 AI 聊天 

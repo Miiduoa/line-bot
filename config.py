@@ -1,13 +1,12 @@
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
-class Config:
-    LINE_CHANNEL_SECRET    = os.getenv('LINE_CHANNEL_SECRET')
-    LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
-    LINE_CHANNEL_ID        = os.getenv('LINE_CHANNEL_ID')
-    OPENWEATHER_API_KEY    = os.getenv('OPENWEATHER_API_KEY')
-    TMDB_API_KEY           = os.getenv('TMDB_API_KEY')
-    NEWSAPI_KEY            = os.getenv('NEWSAPI_KEY')
-    GEMINI_API_KEY         = os.getenv('GEMINI_API_KEY') 
+CHANNEL_ACCESS_TOKEN = os.getenv('CHANNEL_ACCESS_TOKEN')
+CHANNEL_SECRET       = os.getenv('CHANNEL_SECRET')
+GOOGLE_GEMINI_KEY    = os.getenv('GOOGLE_GEMINI_KEY')
+NEWSAPI_KEY          = os.getenv('NEWSAPI_KEY')
+TMDB_API_KEY         = os.getenv('TMDB_API_KEY')
+OWM_API_KEY          = os.getenv('OWM_API_KEY') 
