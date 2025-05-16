@@ -11,5 +11,10 @@
       "src": "/webhook",
       "dest": "/api/webhook.js"
     }
-  ]
+  ],
+  "functions": {
+    "api/webhook.py": {
+      "runtime": "python3.9"
+    }
+  }
 } 
