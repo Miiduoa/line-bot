@@ -1,42 +1,54 @@
-# LINE Bot 多功能助手
+# LINE 機器人
 
-一個結合多種功能的 LINE 聊天機器人，包括：
+這是一個多功能的 LINE 機器人，可以：
+- 查詢天氣（例如：「天氣 台北」）
+- 查詢電影資訊（例如：「電影 復仇者聯盟」）
+- 與 Google Gemini AI 進行對話
 
-1. 天氣查詢 - 發送「天氣 城市名」可獲取當前天氣狀況
-2. 電影資訊 - 發送「電影 電影名」可獲取電影資訊
-3. AI 聊天 - 任何其他訊息都會透過 Google Gemini AI 回應
-
-## 安裝與設置
+## 本地開發
 
 1. 安裝依賴：
    ```
    npm install
    ```
 
-2. 設置環境變數：
-   在 `.env` 文件中填入以下資訊
+2. 在 `.env` 文件中填入你的 API 密鑰：
    ```
-   LINE_CHANNEL_SECRET=<你的 LINE_CHANNEL_SECRET>
-   LINE_CHANNEL_ACCESS_TOKEN=<你的 LINE_CHANNEL_ACCESS_TOKEN>
-   WEATHER_API_KEY=<你的 OpenWeatherMap API Key>
-   TMDB_API_KEY=<你的 TMDB API Key>
-   GEMINI_API_KEY=<你的 Gemini API Key>
+   LINE_CHANNEL_SECRET=你的LINE頻道密鑰
+   LINE_CHANNEL_ACCESS_TOKEN=你的LINE存取令牌
+   WEATHER_API_KEY=你的OpenWeatherMap API金鑰
+   TMDB_API_KEY=你的TheMovieDB API金鑰
+   GEMINI_API_KEY=你的Google Gemini API金鑰
    ```
 
-3. 本地開發：
+3. 啟動本地開發服務器：
    ```
    npm run dev
    ```
 
-4. 部署到 Vercel：
+## 部署到 Vercel
+
+1. 安裝 Vercel CLI：
    ```
-   npm run deploy
+   npm i -g vercel
    ```
 
-## 使用方法
+2. 登入 Vercel：
+   ```
+   vercel login
+   ```
 
-在 LINE 上加入機器人為好友後，可以發送以下訊息：
+3. 部署：
+   ```
+   vercel --prod
+   ```
 
-- `天氣 台北` - 查詢台北市的天氣
-- `電影 復仇者聯盟` - 查詢電影《復仇者聯盟》的資訊
-- 任何其他訊息 - 會透過 AI 進行回覆 
+4. 在 LINE Developers 控制台中，將 Webhook URL 設定為：
+   ```
+   https://你的-vercel-域名.vercel.app/api/webhook
+   ```
+
+## 注意事項
+
+- 對話歷史記錄儲存在記憶體中，服務器重啟後將丟失
+- 確保所有 API 密鑰都有效並且有足夠的配額 

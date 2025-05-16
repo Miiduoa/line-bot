@@ -1,20 +1,21 @@
-// index.js
 require('dotenv').config();
 const express = require('express');
-const webhook = require('./api/webhook');
+const bodyParser = require('body-parser');
+const webhookHandler = require('./api/webhook');
 
 const app = express();
-app.use(express.json());
+const PORT = process.env.PORT || 3000;
 
-app.post('/api/webhook', async (req, res) => {
-  await webhook(req, res);
-});
+app.use(bodyParser.json());
 
 app.get('/', (req, res) => {
-  res.send('LINE Bot API is running');
+  res.send('LINE Bot Server is running!');
 });
 
-const PORT = process.env.PORT || 3000;
+app.post('/api/webhook', async (req, res) => {
+  await webhookHandler(req, res);
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 }); 

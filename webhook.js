@@ -1,4 +1,3 @@
-// api/webhook.js
 require('dotenv').config();
 const { Client, middleware } = require('@line/bot-sdk');
 const axios = require('axios');
