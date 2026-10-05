@@ -1,0 +1,8 @@
+[project]
+name = "reliable-line-webhook"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = ["Flask>=3.1,<4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
