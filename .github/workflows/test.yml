@@ -8,13 +8,18 @@ concurrency:
   group: line-webhook-test-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          python-version: "3.13"
       - run: pip install -r requirements.txt
+      - run: python -m compileall -q app.py worker.py src
       - run: python -m unittest discover -s tests -v
