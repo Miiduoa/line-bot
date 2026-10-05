@@ -9,6 +9,7 @@ from .router import route_text
 class ReplyAction:
     reply_token: str
     text: str
+    event_id: str = ""
 
 
 class WebhookProcessor:
@@ -52,6 +53,7 @@ class WebhookProcessor:
                     ReplyAction(
                         reply_token=reply_token,
                         text="操作太快，請稍後再試。",
+                        event_id=event_id,
                     )
                 )
                 continue
@@ -60,6 +62,7 @@ class WebhookProcessor:
                 ReplyAction(
                     reply_token=reply_token,
                     text=route_text(message.get("text", "")),
+                    event_id=event_id,
                 )
             )
 
