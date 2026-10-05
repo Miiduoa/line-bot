@@ -1,45 +1,61 @@
-# line-bot｜Reliable webhook service
+# line-bot｜Reliable webhook + durable delivery
 
-這個 repo 原本累積了 Python / JavaScript 兩套 bot、數個 zip 與不同 API 實驗。現在整理成單一 Python webhook service，重點不再是「接了幾個 API」，而是 webhook 本身是否可靠。
+[![test](https://github.com/Miiduoa/line-bot/actions/workflows/test.yml/badge.svg)](https://github.com/Miiduoa/line-bot/actions/workflows/test.yml)
 
-目前流程：
+這個 repo 不把重點放在「機器人會回什麼」，而是 webhook 在重送、外部 API 失敗與 process restart 時，資料會不會重複或直接消失。
+
+## Flow
+
+直接模式：
 
 ```text
 LINE webhook
-    ↓
-HMAC-SHA256 signature verification
-    ↓
-JSON parsing
-    ↓
-event idempotency
-    ↓
-per-source rate limit
-    ↓
-command router
-    ↓
-LINE Reply API
+  → HMAC verification
+  → event idempotency
+  → rate limit
+  → command router
+  → LINE Reply API
 ```
 
-## 為什麼先做這些
+設定 `LINE_QUEUE_DB` 後會改成：
 
-Webhook 最麻煩的問題通常不是回一句話，而是：
+```text
+LINE webhook
+  → verify / parse / route
+  → SQLite inbox + outbox
+  → immediate delivery attempt
+               ↓ fail
+        exponential backoff
+               ↓ repeated failure
+          dead-letter metadata
+```
 
-- 偽造 request 能不能進來？
-- LINE redelivery 會不會讓同一事件執行兩次？
-- 同一個使用者短時間大量觸發怎麼辦？
-- domain logic 是否跟 Flask / LINE API 綁死，導致很難測？
+另外可用 `worker.py` 持續 drain 尚未送出的工作。
 
-所以這個版本把 security、idempotency、rate limiting、routing 與 HTTP adapter 分開。
+## Durable delivery
 
-## Commands
+SQLite 裡分成三個概念：
 
-- `help`：列出指令
-- `ping`：健康確認
-- `echo <text>`：回傳指定文字
+- `inbox_events`：記錄已接受的 `webhookEventId`，process restart 後仍能去重。
+- `outbox`：暫存待送出的 reply；claim 時會加 lease，避免同一工作被同時取走。
+- `dead_letters`：超過最大重試次數後留下事件 id、attempts、error type 與文字 SHA-256。
 
-未知指令不會丟給外部 LLM，而是回到固定 help 提示。這讓核心 webhook 在沒有第三方 AI API 的情況下也能完整測試。
+dead-letter 不保存回覆全文。因為排查失敗需要證據，但不代表應該永久多留一份使用者相關文字。
 
-## 執行
+## Retry policy
+
+目前 worker：
+
+- claim 時使用 lease
+- 失敗採 exponential backoff
+- 預設最多 5 次 attempt
+- worker crash 後，lease 到期可以重新 claim
+- 成功送出後刪除 outbox row
+- dead-letter 後刪除原始 outbox payload
+
+這裡是 at-least-once delivery 的小型示範，不宣稱 exactly-once。外部 HTTP API 本身沒有 transaction，所以真正的 exactly-once 不能只靠本地 SQLite 保證。
+
+## Run
 
 ```bash
 python -m venv .venv
@@ -48,51 +64,81 @@ pip install -r requirements.txt
 
 export LINE_CHANNEL_SECRET="..."
 export LINE_CHANNEL_ACCESS_TOKEN="..."
+export LINE_QUEUE_DB="data/linebot.sqlite3"
 
 flask --app app run --port 8000
 ```
 
-Health check：
+另開 worker：
+
+```bash
+python worker.py --loop --interval 2
+```
+
+如果不設定 `LINE_QUEUE_DB`，webhook 仍會使用原本的 direct reply 模式，方便本機最小測試。
+
+## Health
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-## 測試
+啟用 durable delivery 時會多回傳：
+
+```json
+{
+  "durable_delivery": true,
+  "queue": {
+    "seen_events": 12,
+    "pending": 1,
+    "ready": 1,
+    "dead_letters": 0
+  }
+}
+```
+
+health endpoint 只回數量，不回 message body、reply token 或使用者 ID。
+
+## Tests
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-測試覆蓋：
+目前覆蓋：
 
-- 正確／錯誤 LINE signature
-- idempotency TTL
-- rate limiter
+- LINE HMAC signature
+- memory idempotency TTL
+- rate limit
 - command routing
-- redelivery 去重
-- Flask webhook 在錯誤簽章時拒絕 request
-- 合法 request 能產生 reply action
+- webhook redelivery
+- SQLite persistent inbox 去重
+- outbox lease 與 crash recovery
+- delivery success ack
+- retry + exponential backoff
+- dead-letter
+- Flask durable webhook restart scenario
 
-## 設計選擇
+## Design choices
 
-### 不使用 LINE SDK
+### SQLite instead of Redis / Kafka
 
-這版直接實作 LINE 文件定義的 HMAC 驗證與 Reply API HTTP request。不是因為 SDK 不好，而是這個 repo 想把 protocol boundary 看清楚。
+這個作品想驗證的是 durable inbox / outbox、lease、retry 與 dead-letter 語意。單機作品用 SQLite 就能把交易邊界看清楚，也比較容易重現。
 
-### 不把 message body 寫進 log
+如果服務真的需要多 instance、高吞吐量或跨服務事件流，才應該換 PostgreSQL / Redis Streams / message broker，而不是為了作品集硬塞 Kafka。
 
-範例程式不記錄使用者訊息內容，降低不必要的資料留存。
+### Reply token limitation
 
-### In-memory state
+LINE reply token 有時效，因此 persisted retry 並不能保證「隔很久還能成功」。這個 queue 解決的是短暫 upstream failure 與 process crash，不是假裝能突破外部 API 的時效限制。
 
-idempotency 與 rate limit 目前是單 process memory store。正式多 instance 部署應換 Redis 或其他 shared store。
+## Commands
 
-## 限制
+- `help`
+- `ping`
+- `echo <text>`
 
-- 目前只處理 text message event
-- memory idempotency 不適合多 instance
-- 沒有 persistence / queue
-- 沒有做 outbound retry queue
-- rate limit 是簡單 sliding window
-- 未宣稱這是 LINE 官方範例或正式 production service
+未知指令回固定提示，不把使用者輸入轉送到 LLM。
+
+## License
+
+MIT
