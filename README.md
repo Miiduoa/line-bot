@@ -4,6 +4,52 @@
 
 這個 repo 不把重點放在「機器人會回什麼」，而是 webhook 在重送、外部 API 失敗與 process restart 時，資料會不會重複或直接消失。
 
+## 30 秒看 failure handling
+
+| 情境 | 系統怎麼處理 |
+|---|---|
+| LINE 重送同一事件 | 以 `webhookEventId` 去重 |
+| Reply API 暫時失敗 | outbox 保留，exponential backoff 重試 |
+| worker 中途掛掉 | lease 到期後重新 claim |
+| 重試超過上限 | 進 dead-letter metadata |
+| process restart | SQLite inbox 仍保留已接受事件 |
+| 沒啟用 durable mode | 退回 direct reply，方便最小本機測試 |
+
+### Delivery sequence
+
+```mermaid
+sequenceDiagram
+  participant L as LINE
+  participant W as Webhook
+  participant DB as SQLite
+  participant R as Reply API
+  participant K as Worker
+
+  L->>W: webhook event
+  W->>W: verify signature
+  W->>DB: insert inbox + outbox
+  W->>R: immediate attempt
+  alt success
+    R-->>W: 2xx
+    W->>DB: ack / remove outbox
+  else temporary failure
+    R-->>W: error
+    W->>DB: schedule retry
+    K->>DB: claim with lease
+    K->>R: retry
+  end
+```
+
+### Review path
+
+- request verification / routing：`tests/test_core.py`
+- durable queue：`tests/test_delivery_queue.py`
+- worker：`worker.py`
+- reusable core：`src/linebot_core/`
+- CI：`.github/workflows/test.yml`
+
+
+
 ## Flow
 
 直接模式：
